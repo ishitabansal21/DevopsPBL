@@ -1,59 +1,42 @@
-# name: Unit Tests
-
-# on: [push, pull_request]
-
-# jobs:
-#     tests:
-#         runs-on: ubuntu-latest
-
-#         strategy:
-#             matrix:
-#                 node-version: [18.x, 16.x]
-
-#         steps:
-#             - uses: actions/checkout@v2
-#            - name: Use Node.js ${{ matrix.node-version }}
-#               uses: actions/setup-node@v1
-#               with:
-#                   node-version: ${{ matrix.node-version }}
-#             - name: npm install
-#               run: npm ci
-#             - name: tests
-#               run: npm test
-
-name: Run Tests with Docker Compose
+name: Unit Tests
 
 on: [push, pull_request]
 
 jobs:
-  tests:
-    runs-on: ubuntu-latest
+    tests:
+        runs-on: ubuntu-latest
+        
+        strategy:
+            matrix:
+                node-version: [16.x]
+        
+        steps:
+            - uses: actions/checkout@v2
+            
+            - name: Use Node.js ${{ matrix.node-version }}
+              uses: actions/setup-node@v1
+              with:
+                  node-version: ${{ matrix.node-version }}
+            
+            - name: Set up Docker and Docker Compose
+              run: |
+                sudo apt-get update
+                sudo apt-get install -y docker.io
+                sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+                sudo chmod +x /usr/local/bin/docker-compose
+                docker --version
+                docker-compose --version
 
-    services:
-      db:
-        image: postgres:13
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: college
-        ports:
-          - 5432:5432
-        options: --health-cmd="pg_isready -U postgres" --health-interval=10s --health-timeout=5s --health-retries=5
+            - name: Start Docker Compose services
+              run: docker-compose -f docker-compose.yml up -d
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+            - name: Wait for DB to be ready
+              run: |
+                docker-compose exec db bash -c "until pg_isready -U postgres; do echo waiting for db; sleep 2; done"
 
-      - name: Set up Docker Compose
-        run: docker-compose -f docker-compose.yml up -d
+            - name: Run tests
+              run: |
+                docker-compose exec app npm test
 
-      - name: Wait for DB to be ready
-        run: |
-          docker-compose exec db bash -c "until pg_isready -U postgres; do echo waiting for db; sleep 2; done"
-
-      - name: Run tests
-        run: |
-          docker-compose exec app npm test
-
-      - name: Shut down Docker Compose
-        run: docker-compose down
+            - name: Shut down Docker Compose
+              run: docker-compose down
