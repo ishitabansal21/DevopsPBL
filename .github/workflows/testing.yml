@@ -1,22 +1,59 @@
-name: Unit Tests
+# name: Unit Tests
+
+# on: [push, pull_request]
+
+# jobs:
+#     tests:
+#         runs-on: ubuntu-latest
+
+#         strategy:
+#             matrix:
+#                 node-version: [18.x, 16.x]
+
+#         steps:
+#             - uses: actions/checkout@v2
+#            - name: Use Node.js ${{ matrix.node-version }}
+#               uses: actions/setup-node@v1
+#               with:
+#                   node-version: ${{ matrix.node-version }}
+#             - name: npm install
+#               run: npm ci
+#             - name: tests
+#               run: npm test
+
+name: Run Tests with Docker Compose
 
 on: [push, pull_request]
 
 jobs:
-    tests:
-        runs-on: ubuntu-latest
-        
-        strategy:
-            matrix:
-                node-version: [18.x, 16.x]
-        
-        steps:
-            - uses: actions/checkout@v2
-            - name: Use Node.js ${{ matrix.node-version }}
-              uses: actions/setup-node@v1
-              with:
-                  node-version: ${{ matrix.node-version }}
-            - name: npm install
-              run: npm ci
-            - name: tests
-              run: npm test
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: college
+        ports:
+          - 5432:5432
+        options: --health-cmd="pg_isready -U postgres" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Compose
+        run: docker-compose -f docker-compose.yml up -d
+
+      - name: Wait for DB to be ready
+        run: |
+          docker-compose exec db bash -c "until pg_isready -U postgres; do echo waiting for db; sleep 2; done"
+
+      - name: Run tests
+        run: |
+          docker-compose exec app npm test
+
+      - name: Shut down Docker Compose
+        run: docker-compose down
