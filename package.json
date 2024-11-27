@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest",
+    "test": "jest docker-compose exec app npm test",
     "dev": "node server.js"
   },
   "keywords": [],
